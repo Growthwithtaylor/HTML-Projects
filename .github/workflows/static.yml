@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Reader</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 50px;
+        }
+        #inputText, #speedInput, #textSizeInput, #chunkSizeInput {
+            width: 80%;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        #inputText {
+            resize: both;
+        }
+        #displayBox {
+            margin-top: 30px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            width: 80%;
+            height: 300px;
+            margin-left: auto;
+            margin-right: auto;
+            position: relative;
+            resize: both;
+            overflow: auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #displayWord {
+            font-size: 48px;
+            white-space: pre-wrap;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            line-height: 1.5;
+            text-align: center;
+        }
+        #speedDisplay {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            font-size: 16px;
+            color: #333;
+        }
+        .full-screen {
+            background-color: white;
+            color: black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            text-align: center;
+            height: 100vh;
+        }
+        #playPauseButton, #speedUpButton, #speedDownButton {
+            font-size: 16px;
+            padding: 10px 20px;
+            cursor: pointer;
+            display: none;
+        }
+        .mobile-buttons {
+            position: absolute;
+            bottom: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            width: 100%;
+        }
+        .input-label {
+            display: block;
+            text-align: left;
+            width: 80%;
+            margin: 0 auto 5px;
+        }
+        @media (max-width: 768px) {
+            #displayBox {
+                height: 200px;
+            }
+            #displayWord {
+                font-size: 24px;
+            }
+            #playPauseButton, #speedUpButton, #speedDownButton {
+                display: block;
+            }
+            .mobile-buttons {
+                display: flex;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Text Reader</h1>
+    <label class="input-label">Enter your text here:</label>
+    <textarea id="inputText" rows="10"></textarea><br>
+    <label class="input-label">Words per minute (default: 200):</label>
+    <input type="number" id="speedInput" value="200"><br>
+    <label class="input-label">Font size (px) (default: 48):</label>
+    <input type="number" id="textSizeInput" value="48"><br>
+    <label class="input-label">Words per chunk (default: 1):</label>
+    <input type="number" id="chunkSizeInput" value="1"><br>
+    <label><input type="checkbox" id="fillerCheckbox"> Include filler words</label><br>
+    <button id="startButton" class="primary-button">Start Reading</button>
+    <button id="fullScreenButton" class="primary-button">Toggle Full Screen</button>
+    <div id="displayBox">
+        <div id="speedDisplay"></div>
+        <div id="displayWord"></div>
+    </div>
+    <div class="mobile-buttons" style="display:none;">
+        <button id="speedDownButton" class="primary-button">-</button>
+        <button id="playPauseButton" class="primary-button">Play</button>
+        <button id="speedUpButton" class="primary-button">+</button>
+    </div>
+
+    <script>
+        const startButton = document.getElementById('startButton');
+        const inputText = document.getElementById('inputText');
+        const speedInput = document.getElementById('speedInput');
+        const textSizeInput = document.getElementById('textSizeInput');
+        const chunkSizeInput = document.getElementById('chunkSizeInput');
+        const fillerCheckbox = document.getElementById('fillerCheckbox');
+        const displayWord = document.getElementById('displayWord');
+        const speedDisplay = document.getElementById('speedDisplay');
+        const displayBox = document.getElementById('displayBox');
+        const fullScreenButton = document.getElementById('fullScreenButton');
+        const playPauseButton = document.getElementById('playPauseButton');
+        const speedUpButton = document.getElementById('speedUpButton');
+        const speedDownButton = document.getElementById('speedDownButton');
+        const mobileButtons = document.querySelector('.mobile-buttons');
+
+        const fillerWords = [
+            // English filler words
+            'a', 'an', 'the', 'and', 'but', 'or', 'so', 'because', 'as', 'until', 'while', 'of', 'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now',
+            // Danish filler words
+            'en', 'et', 'den', 'det', 'og', 'men', 'eller', 'så', 'fordi', 'som', 'indtil', 'mens', 'af', 'på', 'ved', 'for', 'med', 'om', 'imod', 'mellem', 'ind', 'gennem', 'under', 'før', 'efter', 'over', 'til', 'fra', 'op', 'ned', 'i', 'ud', 'på', 'af', 'over', 'under', 'igen', 'yderligere', 'så', 'en gang', 'her', 'der', 'når', 'hvor', 'hvorfor', 'hvordan', 'alle', 'enhver', 'begge', 'hver', 'få', 'mere', 'flere', 'andre', 'nogle', 'sådanne', 'ingen', 'ingen', 'ikke', 'kun', 'egen', 'samme', 'så', 'end', 'for', 'meget', 's', 't', 'kan', 'vil', 'bare', 'ikke', 'bør', 'nu'
+        ];
+
+        let intervalId;
+        let isPaused = false;
+        let isCompleted = false;
+        let currentSpeed;
+        let currentChunkSize;
+        let currentFontSize;
+        let wordIndex = 0;
+        let words = [];
+
+        startButton.addEventListener('click', () => {
+            const text = inputText.value;
+            const speed = parseInt(speedInput.value, 10);
+            const textSize = parseInt(textSizeInput.value, 10);
+            const chunkSize = parseInt(chunkSizeInput.value, 10);
+            const includeFiller = fillerCheckbox.checked;
+            
+            if (!text || !speed || !textSize || !chunkSize) {
+                alert('Please enter text, speed, text size, and chunk size.');
+                return;
+            }
+
+            words = splitTextIntoChunks(text, chunkSize);
+            if (!includeFiller) {
+                words = words.filter(chunk => !fillerWords.includes(chunk.toLowerCase()));
+            }
+            wordIndex = 0;
+            currentSpeed = speed;
+            currentChunkSize = chunkSize;
+            currentFontSize = textSize;
+            displayWord.style.fontSize = `${textSize}px`;
+            speedDisplay.textContent = `Speed: ${currentSpeed} WPM`;
+
+            startReading();
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.altKey && event.key === '1') {
+                currentSpeed = Math.max(10, currentSpeed - 10); // Prevents speed from being too low
+                adjustSpeed();
+            }
+            if (event.altKey && event.key === '2') {
+                currentSpeed += 10;
+                adjustSpeed();
+            }
+            if (event.altKey && event.key === '3') {
+                currentChunkSize = Math.max(1, currentChunkSize - 1); // Prevents chunk size from being less than 1
+                adjustChunkSize();
+            }
+            if (event.altKey && event.key === '4') {
+                currentChunkSize += 1;
+                adjustChunkSize();
+            }
+            if (event.altKey && event.key === '5') {
+                currentFontSize = Math.max(10, currentFontSize - 2); // Prevents font size from being too small
+                adjustFontSize();
+            }
+            if (event.altKey && event.key === '6') {
+                currentFontSize += 2;
+                adjustFontSize();
+            }
+            if (event.code === 'Space') {
+                event.preventDefault(); // Prevents default spacebar action
+                if (isCompleted) {
+                    isCompleted = false;
+                    startReading();
+                } else {
+                    togglePause();
+                }
+            }
+        });
+
+        fullScreenButton.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                displayBox.requestFullscreen();
+                displayBox.classList.add('full-screen');
+                mobileButtons.style.display = 'flex';
+            } else {
+                document.exitFullscreen();
+                displayBox.classList.remove('full-screen');
+                mobileButtons.style.display = 'none';
+            }
+        });
+
+        playPauseButton.addEventListener('click', () => {
+            if (isCompleted) {
+                isCompleted = false;
+                startReading();
+            } else {
+                togglePause();
+            }
+        });
+
+        speedUpButton.addEventListener('click', () => {
+            currentSpeed += 10;
+            adjustSpeed();
+        });
+
+        speedDownButton.addEventListener('click', () => {
+            currentSpeed = Math.max(10, currentSpeed - 10); // Prevents speed from being too low
+            adjustSpeed();
+        });
+
+        function splitTextIntoChunks(text, chunkSize) {
+            const words = text.split(/\s+/);
+            const chunks = [];
+            let chunk = [];
+            words.forEach(word => {
+                chunk.push(word);
+                if (chunk.length >= chunkSize || word.endsWith('.')) {
+                    chunks.push(chunk.join(' '));
+                    chunk = [];
+                }
+            });
+            if (chunk.length > 0) {
+                chunks.push(chunk.join(' '));
+            }
+            return chunks;
+        }
+
+        function startReading() {
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
+            wordIndex = 0;
+            isPaused = false;
+            playPauseButton.textContent = 'Pause';
+            intervalId = setInterval(displayNextWord, 60000 / currentSpeed);
+            displayBox.focus();
+        }
+
+        function adjustSpeed() {
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
+            intervalId = setInterval(displayNextWord, 60000 / currentSpeed);
+            speedDisplay.textContent = `Speed: ${currentSpeed} WPM`;
+        }
+
+        function adjustChunkSize() {
+            words = splitTextIntoChunks(inputText.value, currentChunkSize);
+        }
+
+        function adjustFontSize() {
+            displayWord.style.fontSize = `${currentFontSize}px`;
+        }
+
+        function displayNextWord() {
+            if (!isPaused && wordIndex < words.length) {
+                displayWord.textContent = words[wordIndex];
+                wordIndex++;
+            } else if (wordIndex >= words.length) {
+                displayWord.textContent = 'Done!';
+                clearInterval(intervalId);
+                isCompleted = true;
+                playPauseButton.textContent = 'Restart';
+            }
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            if (!isPaused) {
+                playPauseButton.textContent = 'Pause';
+                startReading();
+            } else {
+                playPauseButton.textContent = 'Resume';
+                clearInterval(intervalId);
+            }
+        }
+    </script>
+</body>
+</html>
